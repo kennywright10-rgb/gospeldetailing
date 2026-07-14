@@ -122,7 +122,7 @@ section{padding:86px 0;}
 
 /* ===== Services ===== */
 .svc-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:26px;}
-.svc-card{background:#fff; border:1px solid var(--rule); border-radius:14px; padding:30px 26px; transition:transform .18s, box-shadow .18s;}
+.svc-card{background:#fff; border:1px solid var(--rule); border-radius:14px; padding:30px 26px; transition:transform .18s, box-shadow .18s; display:block; cursor:pointer;}
 .svc-card:hover{transform:translateY(-6px); box-shadow:0 18px 34px rgba(44,18,89,.12);}
 .icon-circ{width:56px; height:56px; border-radius:50%; background:linear-gradient(135deg,var(--purple-light),var(--purple)); display:flex; align-items:center; justify-content:center; margin-bottom:18px;}
 .icon-circ svg{width:26px; height:26px; stroke:#fff; fill:none; stroke-width:1.8;}
@@ -302,5 +302,4 @@ footer ul li a:hover{color:var(--gold-light);}
 }
 @media(max-width:640px){
   .link-grid{grid-template-columns:1fr;}
-  .mini-cta{flex-direction:column; text-align:center;}
-}
+  .mini-cta{flex-direction
