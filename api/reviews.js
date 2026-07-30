@@ -13,7 +13,7 @@
 //                         search step entirely.
 //   GOOGLE_PLACE_QUERY - override the default search text below.
 
-const DEFAULT_QUERY = 'Gospel Detailing LLC, 300 Highway 81 W, McDonough, GA 30252';
+const DEFAULT_QUERY = 'Gospel Detailing LLC, McDonough, GA';
 
 async function resolvePlaceId(apiKey) {
   const explicit = process.env.GOOGLE_PLACE_ID;
@@ -27,17 +27,31 @@ async function resolvePlaceId(apiKey) {
       'X-Goog-Api-Key': apiKey,
       'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress',
     },
-    body: JSON.stringify({ textQuery: query, maxResultCount: 1 }),
+    body: JSON.stringify({
+      textQuery: query,
+      regionCode: 'US',
+      languageCode: 'en',
+      maxResultCount: 5,
+    }),
   });
 
+  const raw = await response.text();
+
   if (!response.ok) {
-    const detail = await response.text();
-    throw new Error('text search failed: ' + detail);
+    throw new Error('text search HTTP ' + response.status + ': ' + raw);
   }
 
-  const data = await response.json();
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch (e) {
+    throw new Error('text search returned non-JSON: ' + raw.slice(0, 300));
+  }
+
   const place = data.places && data.places[0];
-  if (!place) throw new Error('text search returned no results for: ' + query);
+  if (!place) {
+    throw new Error('text search returned no results for "' + query + '". Raw response: ' + raw.slice(0, 500));
+  }
   return place.id;
 }
 
