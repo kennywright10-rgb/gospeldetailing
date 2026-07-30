@@ -121,6 +121,14 @@ section{padding:86px 0;}
 .g-icon{display:flex; align-items:center; justify-content:center; margin-bottom:16px;}
 .reviews-g-card h2{font-size:clamp(26px,3.4vw,34px); margin:8px 0 14px; color:var(--ink);}
 .reviews-g-card p{color:var(--mid); font-size:15.5px; margin-bottom:24px;}
+.reviews-list{display:grid; gap:18px; margin-bottom:28px; text-align:left;}
+.review-card{background:var(--off2); border:1px solid var(--rule); border-radius:14px; padding:20px 22px;}
+.review-head{display:flex; align-items:center; gap:12px; margin-bottom:10px;}
+.review-avatar{width:36px; height:36px; border-radius:50%; object-fit:cover; flex-shrink:0;}
+.review-author{font-weight:700; font-size:14.5px; color:var(--ink);}
+.review-stars{color:var(--gold); font-size:13px; letter-spacing:1px;}
+.review-text{color:var(--mid); font-size:14.5px; line-height:1.6; margin-bottom:8px;}
+.review-time{color:var(--muted); font-size:12px;}
 
 /* ===== Services ===== */
 .svc-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:26px;}
