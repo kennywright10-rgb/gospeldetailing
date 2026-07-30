@@ -1,27 +1,62 @@
 // Vercel Serverless Function: /api/reviews
-// Fetches Google Place Details (reviews + rating) and caches the response
-// at the CDN edge so we call Google roughly once per cache window,
-// not once per site visitor.
+// Resolves the Gospel Detailing place by name/address via Places API Text
+// Search (no manual Place ID hunting required), then fetches Place Details
+// (reviews + rating). The whole result is cached at the CDN edge so we call
+// Google roughly once per cache window, not once per site visitor.
 //
-// Required environment variables (set in Vercel Project Settings -> Environment Variables):
-//   GOOGLE_PLACES_API_KEY  - API key restricted to Places API + this domain
-//   GOOGLE_PLACE_ID        - Place ID for the Gospel Detailing GBP listing
+// Required environment variable (Vercel Project Settings -> Environment Variables):
+//   GOOGLE_PLACES_API_KEY  - API key restricted to Places API (New)
+//
+// Optional:
+//   GOOGLE_PLACE_ID    - if you already have a confirmed valid Place ID
+//                         (starts with "ChIJ"), set this to skip the text
+//                         search step entirely.
+//   GOOGLE_PLACE_QUERY - override the default search text below.
+
+const DEFAULT_QUERY = 'Gospel Detailing LLC, 300 Highway 81 W, McDonough, GA 30252';
+
+async function resolvePlaceId(apiKey) {
+  const explicit = process.env.GOOGLE_PLACE_ID;
+  if (explicit && explicit.startsWith('ChIJ')) return explicit;
+
+  const query = process.env.GOOGLE_PLACE_QUERY || DEFAULT_QUERY;
+  const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': apiKey,
+      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress',
+    },
+    body: JSON.stringify({ textQuery: query, maxResultCount: 1 }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error('text search failed: ' + detail);
+  }
+
+  const data = await response.json();
+  const place = data.places && data.places[0];
+  if (!place) throw new Error('text search returned no results for: ' + query);
+  return place.id;
+}
 
 export default async function handler(req, res) {
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
-  const placeId = process.env.GOOGLE_PLACE_ID;
 
-  if (!apiKey || !placeId) {
+  if (!apiKey) {
     res.status(200).json({ configured: false, rating: null, total: 0, reviews: [] });
     return;
   }
 
   try {
+    const placeId = await resolvePlaceId(apiKey);
+
     const url = `https://places.googleapis.com/v1/places/${placeId}`;
     const response = await fetch(url, {
       headers: {
         'X-Goog-Api-Key': apiKey,
-        'X-Goog-FieldMask': 'rating,userRatingCount,reviews,googleMapsUri',
+        'X-Goog-FieldMask': 'displayName,rating,userRatingCount,reviews,googleMapsUri',
       },
     });
 
@@ -46,6 +81,7 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 's-maxage=21600, stale-while-revalidate=86400');
     res.status(200).json({
       configured: true,
+      placeName: data.displayName?.text || null,
       rating: data.rating || null,
       total: data.userRatingCount || 0,
       mapsUrl: data.googleMapsUri || null,
