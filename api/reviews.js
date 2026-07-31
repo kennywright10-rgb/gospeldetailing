@@ -13,13 +13,23 @@
 //                         search step entirely.
 //   GOOGLE_PLACE_QUERY - override the default search text below.
 
-const DEFAULT_QUERY = 'Gospel Detailing LLC, McDonough, GA';
-// Exact business coordinates pulled directly from the confirmed Google Maps
-// listing URL for Gospel Detailing LLC (5.0 stars, 7 reviews). The value
-// previously here (33.4473, -84.1469) was an approximate "downtown McDonough"
-// placeholder used when the site was first generated -- it pointed at the
-// town square, ~10 miles from the actual GBP pin, which is why nearby search
-// kept returning unrelated businesses (restaurants, courthouses, etc.).
+// Gospel Detailing LLC is a Service-Area Business (mobile detailing, no
+// storefront) -- confirmed on Google Maps: 5.0 stars, 7 reviews, "Car
+// detailing service", no public street address shown on the listing card.
+// SABs don't get a precise public pin, which is why coordinate-based Nearby
+// Search can never reliably find them (there's no fixed point to search
+// around). Text Search by name is the only approach that doesn't depend on
+// a pin, so it's tried first here, with several query phrasings in case one
+// wording doesn't match Google's Places index for this listing.
+const TEXT_QUERIES = [
+  'Gospel Detailing',
+  'Gospel Detailing LLC',
+  'Gospel Detailing McDonough Georgia',
+  'Gospel Detailing LLC, McDonough, GA',
+  'Gospel Detailing (404) 594-9262',
+];
+// Approximate coordinates from the GBP listing's service-area center, kept
+// only as a last-resort fallback -- not reliable for an SAB (see above).
 const BUSINESS_LAT = 33.326237;
 const BUSINESS_LNG = -84.190745;
 const NAME_MATCH = 'gospel';
@@ -64,8 +74,7 @@ async function searchNearby(apiKey) {
   );
 }
 
-async function searchText(apiKey) {
-  const query = process.env.GOOGLE_PLACE_QUERY || DEFAULT_QUERY;
+async function searchTextOnce(apiKey, query) {
   const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
     method: 'POST',
     headers: {
@@ -82,20 +91,31 @@ async function searchText(apiKey) {
   });
 
   const raw = await response.text();
-  if (!response.ok) throw new Error('text search HTTP ' + response.status + ': ' + raw);
+  if (!response.ok) throw new Error('HTTP ' + response.status + ': ' + raw);
 
   let data;
   try {
     data = JSON.parse(raw);
   } catch (e) {
-    throw new Error('text search returned non-JSON: ' + raw.slice(0, 300));
+    throw new Error('non-JSON response: ' + raw.slice(0, 200));
   }
 
   const place = data.places && data.places[0];
-  if (!place) {
-    throw new Error('text search returned no results for "' + query + '". Raw response: ' + raw.slice(0, 500));
-  }
+  if (!place) throw new Error('no results (raw: ' + raw.slice(0, 100) + ')');
   return place.id;
+}
+
+async function searchText(apiKey) {
+  const queries = process.env.GOOGLE_PLACE_QUERY ? [process.env.GOOGLE_PLACE_QUERY] : TEXT_QUERIES;
+  const attempts = [];
+  for (const query of queries) {
+    try {
+      return await searchTextOnce(apiKey, query);
+    } catch (e) {
+      attempts.push('"' + query + '": ' + e.message);
+    }
+  }
+  throw new Error('all text search queries failed -- ' + attempts.join(' | '));
 }
 
 async function resolvePlaceId(apiKey) {
@@ -103,12 +123,12 @@ async function resolvePlaceId(apiKey) {
   if (explicit && explicit.startsWith('ChIJ')) return explicit;
 
   try {
-    return await searchNearby(apiKey);
-  } catch (nearbyErr) {
+    return await searchText(apiKey);
+  } catch (textErr) {
     try {
-      return await searchText(apiKey);
-    } catch (textErr) {
-      throw new Error('Nearby search failed: ' + nearbyErr.message + ' | Text search failed: ' + textErr.message);
+      return await searchNearby(apiKey);
+    } catch (nearbyErr) {
+      throw new Error('Text search failed: ' + textErr.message + ' | Nearby search failed: ' + nearbyErr.message);
     }
   }
 }
