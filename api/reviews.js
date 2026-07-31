@@ -14,11 +14,52 @@
 //   GOOGLE_PLACE_QUERY - override the default search text below.
 
 const DEFAULT_QUERY = 'Gospel Detailing LLC, McDonough, GA';
+// Exact business coordinates, same as the JSON-LD on the site (index.html).
+const BUSINESS_LAT = 33.4473;
+const BUSINESS_LNG = -84.1469;
+const NAME_MATCH = 'gospel';
 
-async function resolvePlaceId(apiKey) {
-  const explicit = process.env.GOOGLE_PLACE_ID;
-  if (explicit && explicit.startsWith('ChIJ')) return explicit;
+async function searchNearby(apiKey) {
+  const response = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': apiKey,
+      'X-Goog-FieldMask': 'places.id,places.displayName',
+    },
+    body: JSON.stringify({
+      locationRestriction: {
+        circle: {
+          center: { latitude: BUSINESS_LAT, longitude: BUSINESS_LNG },
+          radius: 300.0,
+        },
+      },
+      maxResultCount: 20,
+    }),
+  });
 
+  const raw = await response.text();
+  if (!response.ok) throw new Error('nearby search HTTP ' + response.status + ': ' + raw);
+
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch (e) {
+    throw new Error('nearby search returned non-JSON: ' + raw.slice(0, 300));
+  }
+
+  const places = data.places || [];
+  const match = places.find((p) => (p.displayName?.text || '').toLowerCase().includes(NAME_MATCH));
+  if (match) return match.id;
+  if (places.length === 1) return places[0].id;
+
+  const names = places.map((p) => p.displayName?.text).join(', ');
+  throw new Error(
+    'nearby search found ' + places.length + ' place(s) near the business coordinates, none named "Gospel...": ' + (names || '(none)')
+  );
+}
+
+async function searchText(apiKey) {
   const query = process.env.GOOGLE_PLACE_QUERY || DEFAULT_QUERY;
   const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
     method: 'POST',
@@ -36,10 +77,7 @@ async function resolvePlaceId(apiKey) {
   });
 
   const raw = await response.text();
-
-  if (!response.ok) {
-    throw new Error('text search HTTP ' + response.status + ': ' + raw);
-  }
+  if (!response.ok) throw new Error('text search HTTP ' + response.status + ': ' + raw);
 
   let data;
   try {
@@ -53,6 +91,21 @@ async function resolvePlaceId(apiKey) {
     throw new Error('text search returned no results for "' + query + '". Raw response: ' + raw.slice(0, 500));
   }
   return place.id;
+}
+
+async function resolvePlaceId(apiKey) {
+  const explicit = process.env.GOOGLE_PLACE_ID;
+  if (explicit && explicit.startsWith('ChIJ')) return explicit;
+
+  try {
+    return await searchNearby(apiKey);
+  } catch (nearbyErr) {
+    try {
+      return await searchText(apiKey);
+    } catch (textErr) {
+      throw new Error('Nearby search failed: ' + nearbyErr.message + ' | Text search failed: ' + textErr.message);
+    }
+  }
 }
 
 export default async function handler(req, res) {
