@@ -22,11 +22,9 @@
 // a pin, so it's tried first here, with several query phrasings in case one
 // wording doesn't match Google's Places index for this listing.
 const TEXT_QUERIES = [
-  'Gospel Detailing',
-  'Gospel Detailing LLC',
-  'Gospel Detailing McDonough Georgia',
   'Gospel Detailing LLC, McDonough, GA',
-  'Gospel Detailing (404) 594-9262',
+  'Gospel Detailing McDonough Georgia',
+  'Gospel Detailing LLC McDonough',
 ];
 // Approximate coordinates from the GBP listing's service-area center, kept
 // only as a last-resort fallback -- not reliable for an SAB (see above).
@@ -100,9 +98,20 @@ async function searchTextOnce(apiKey, query) {
     throw new Error('non-JSON response: ' + raw.slice(0, 200));
   }
 
-  const place = data.places && data.places[0];
-  if (!place) throw new Error('no results (raw: ' + raw.slice(0, 100) + ')');
-  return place.id;
+  const places = data.places || [];
+  if (places.length === 0) throw new Error('no results (raw: ' + raw.slice(0, 100) + ')');
+
+  // Google's text search can return a confident top match for a totally
+  // different, unrelated business (this bit us once: a generic query
+  // returned "PHNX Auto Detailing" as result #1 with zero relation to
+  // Gospel Detailing). Never trust position -- only accept a result whose
+  // name actually contains "gospel".
+  const match = places.find((p) => (p.displayName?.text || '').toLowerCase().includes(NAME_MATCH));
+  if (!match) {
+    const names = places.map((p) => p.displayName?.text).join(', ');
+    throw new Error('top results did not include a "Gospel..." match: ' + names);
+  }
+  return match.id;
 }
 
 async function searchText(apiKey) {
@@ -159,6 +168,21 @@ export default async function handler(req, res) {
     }
 
     const data = await response.json();
+
+    // Final safety net: never publish reviews for a place that isn't
+    // actually named "Gospel...", no matter how it was resolved.
+    const resolvedName = data.displayName?.text || '';
+    if (!resolvedName.toLowerCase().includes(NAME_MATCH)) {
+      res.status(200).json({
+        configured: true,
+        error: true,
+        detail: 'Resolved place "' + resolvedName + '" does not match Gospel Detailing -- refusing to publish its reviews.',
+        rating: null,
+        total: 0,
+        reviews: [],
+      });
+      return;
+    }
 
     const reviews = (data.reviews || []).map((r) => ({
       author: r.authorAttribution?.displayName || 'Google User',
