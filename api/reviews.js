@@ -14,9 +14,14 @@
 //   GOOGLE_PLACE_QUERY - override the default search text below.
 
 const DEFAULT_QUERY = 'Gospel Detailing LLC, McDonough, GA';
-// Exact business coordinates, same as the JSON-LD on the site (index.html).
-const BUSINESS_LAT = 33.4473;
-const BUSINESS_LNG = -84.1469;
+// Exact business coordinates pulled directly from the confirmed Google Maps
+// listing URL for Gospel Detailing LLC (5.0 stars, 7 reviews). The value
+// previously here (33.4473, -84.1469) was an approximate "downtown McDonough"
+// placeholder used when the site was first generated -- it pointed at the
+// town square, ~10 miles from the actual GBP pin, which is why nearby search
+// kept returning unrelated businesses (restaurants, courthouses, etc.).
+const BUSINESS_LAT = 33.326237;
+const BUSINESS_LNG = -84.190745;
 const NAME_MATCH = 'gospel';
 
 async function searchNearby(apiKey) {
@@ -31,7 +36,7 @@ async function searchNearby(apiKey) {
       locationRestriction: {
         circle: {
           center: { latitude: BUSINESS_LAT, longitude: BUSINESS_LNG },
-          radius: 300.0,
+          radius: 500.0,
         },
       },
       maxResultCount: 20,
